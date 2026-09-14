@@ -475,122 +475,8 @@ App.jsx (Main Container & Active Tab State)
                                  +---------------------------+
 ```
 
----
 
-## SECTION 11 — INTERVIEW EXPLANATION
-
-### 2-Minute Project Explanation for Interviews
-
-> "LexTrace is a legal document intelligence platform designed to ingest contracts, case precedents, and regulatory filings, parse their content, and manage version history.
->
-> In Milestone 1, I built the core backend foundation using Python and FastAPI. The system accepts file uploads in PDF, DOCX, and TXT formats up to 25MB alongside legal metadata such as jurisdiction, practice area, and client references.
->
-> When a file is uploaded, the backend inspects file signature magic bytes to prevent file spoofing, saves the physical file in a safe directory structure (`uploads/<document_id>/v<version>/`), and extracts raw text using format-specific extractors (`pypdf` for PDFs and `python-docx` for Word documents).
->
-> Persistence is managed via SQLAlchemy 2.x ORM using an SQLite database with two main models: `Document`, representing the logical legal document, and `DocumentVersion`, tracking version numbers, physical file paths, version statuses (`current`, `superseded`, `draft`), and extracted text.
->
-> I also created a REST API suite for document ingestion, listing, detail inspection, raw text preview, and cascading deletion, verified with an 11-case Pytest test suite and integrated with a React frontend document vault interface."
-
----
-
-## SECTION 12 — IMPORTANT TECHNICAL CONCEPTS
-
-1. **FastAPI**: Modern, high-performance Python web framework for building APIs with automatic OpenAPI/Swagger documentation. Used in LexTrace for all backend REST endpoints. (`backend/main.py`, `app/routers/documents.py`).
-2. **REST API**: Architectural style for web services using standard HTTP methods (`GET`, `POST`, `DELETE`). LexTrace uses REST for document operations.
-3. **`multipart/form-data`**: HTTP encoding format used to upload binary files alongside form text fields in a single HTTP request. (`app/routers/documents.py`).
-4. **SQLAlchemy 2.x ORM**: Python Object-Relational Mapper that maps Python classes to relational database tables. Used in LexTrace to manage SQLite database persistence cleanly. (`app/db/database.py`, `app/db/models.py`).
-5. **SQLite**: Embedded file-based SQL database engine stored at `backend/data/lextrace.db`.
-6. **Database Session**: Transactional context manager (`SessionLocal` / `get_db()`) provided per request to commit or roll back database changes. (`app/db/database.py`).
-7. **Pydantic V2**: Data validation library using Python type hints. Used for validating metadata inputs (`DocumentMetadataInput`) and shaping JSON API responses (`DocumentUploadResponse`). (`app/schemas/document.py`).
-8. **File Signature / Magic Bytes**: The initial bytes of a file used to verify its true file type (e.g. `%PDF` for PDF). Used in LexTrace to block extension spoofing. (`app/services/document_extractor.py`).
-9. **Dependency Injection**: Design pattern where dependencies (like DB sessions) are injected into route handlers via FastAPI `Depends(get_db)`.
-
----
-
-## SECTION 13 — QUESTIONS I SHOULD BE ABLE TO ANSWER
-
-1. **Q: Why did you choose FastAPI for LexTrace?**
-   - **A**: FastAPI provides high performance, automatic Pydantic data validation, native OpenAPI/Swagger docs at `/docs`, and clean async handling.
-   - *Code*: `backend/main.py`.
-
-2. **Q: How is the database configured and why use SQLite for Milestone 1?**
-   - **A**: Configured via `DATABASE_URL` (`sqlite:///./data/lextrace.db`). SQLite allows rapid local development without external service dependencies while SQLAlchemy ORM abstracts SQL queries for easy future PostgreSQL migration.
-   - *Code*: `backend/app/core/config.py`, `backend/app/db/database.py`.
-
-3. **Q: Why don't you store binary PDF/DOCX files directly in SQLite?**
-   - **A**: Storing large binary files in SQLite bloats the database file, degrades query performance, and complicates backups. LexTrace stores physical files on disk under `uploads/` and stores metadata and extracted text in SQLite.
-   - *Code*: `backend/app/utils/file_storage.py`, `backend/app/db/models.py`.
-
-4. **Q: How does the document upload endpoint work?**
-   - **A**: Accepts `multipart/form-data`, validates extension and file header, saves file to `uploads/`, extracts text, creates `Document` and `DocumentVersion` DB records, updates version status, and commits the transaction.
-   - *Code*: `backend/app/routers/documents.py::upload_document()`.
-
-5. **Q: How do you prevent file extension spoofing?**
-   - **A**: `DocumentExtractor.validate_file_header()` inspects the first 16 bytes of the file to verify PDF `%PDF` or DOCX `PK\x03\x04` magic byte signatures.
-   - *Code*: `backend/app/services/document_extractor.py`.
-
-6. **Q: How are document versions represented in the database?**
-   - **A**: A 1-to-N relationship between `Document` and `DocumentVersion`. `DocumentVersion` stores `version_number`, `version_id`, `file_path`, `extracted_text`, and `status` (`current`, `superseded`, `draft`).
-   - *Code*: `backend/app/db/models.py`.
-
-7. **Q: What happens when a new version marked 'current' is uploaded for an existing document?**
-   - **A**: The router updates any existing `DocumentVersion` records for that document with status `'current'` to `'superseded'`, ensuring only one active current version.
-   - *Code*: `backend/app/routers/documents.py`.
-
-8. **Q: How is text extracted from PDF files?**
-   - **A**: Using `pypdf.PdfReader`, page by page. If no text is extracted (e.g. scanned image PDF), it raises an `ExtractionError`.
-   - *Code*: `backend/app/services/document_extractor.py::extract_pdf()`.
-
-9. **Q: How is text extracted from Word DOCX files?**
-   - **A**: Using `python-docx` to extract text from all document paragraphs and table cells.
-   - *Code*: `backend/app/services/document_extractor.py::extract_docx()`.
-
-10. **Q: What happens if text extraction fails during upload?**
-    - **A**: The endpoint catches `ExtractionError`, deletes the uploaded physical file from disk, and returns HTTP 400 Bad Request.
-    - *Code*: `backend/app/routers/documents.py`.
-
-11. **Q: How is path traversal prevented during file upload and deletion?**
-    - **A**: Filenames and document IDs are sanitized with `sanitize_filename()`, stripping directory separators. Deletion verifies the path stays strictly within `settings.UPLOAD_DIR`.
-    - *Code*: `backend/app/utils/file_storage.py`.
-
-12. **Q: What file size limits are enforced?**
-    - **A**: 25 MB max size limit configured via `MAX_UPLOAD_SIZE_BYTES`. Streams check byte count chunk-by-chunk during upload.
-    - *Code*: `backend/app/core/config.py`, `backend/app/utils/file_storage.py`.
-
-13. **Q: How does document deletion work?**
-    - **A**: `DELETE /api/documents/{document_id}` calls `delete_document_directory()` to remove disk files, then deletes the `Document` ORM record which cascades to delete all `DocumentVersion` DB records.
-    - *Code*: `backend/app/routers/documents.py`.
-
-14. **Q: How does database initialization work on server startup?**
-    - **A**: `main.py` uses a FastAPI `lifespan` manager that calls `init_db()`, executing `Base.metadata.create_all(bind=engine)` before taking requests.
-    - *Code*: `backend/main.py`, `backend/app/db/init_db.py`.
-
-15. **Q: What Pydantic validations exist for metadata?**
-    - **A**: `DocumentMetadataInput` validates `document_name` length, enforces `document_type` to `contract|case_precedent|regulation|other`, and status to `current|superseded|draft`.
-    - *Code*: `backend/app/schemas/document.py`.
-
-16. **Q: How does the frontend communicate with the backend?**
-    - **A**: `frontend/src/api.js` uses native `fetch()` calls to `http://localhost:5000/api`. `uploadDocument()` passes a `FormData` object.
-    - *Code*: `frontend/src/api.js`.
-
-17. **Q: How are unit and integration tests structured?**
-    - **A**: Pytest with an in-memory SQLite database (`sqlite:///:memory:`) fixture and FastAPI `TestClient` overriding `get_db`.
-    - *Code*: `backend/tests/conftest.py`.
-
-18. **Q: What test cases are currently implemented?**
-    - **A**: 11 tests covering SQLite connection, document creation, versioning, cascading delete, PDF/DOCX/TXT extractions, zero-byte file rejection, magic byte check, and full upload/list/detail/text/delete API flow.
-    - *Code*: `backend/tests/test_database.py`, `test_extraction.py`, `test_documents_api.py`.
-
-19. **Q: How is the list endpoint optimized for lightweight performance?**
-    - **A**: `GET /api/documents` returns document metadata and version number/status but excludes `extracted_text`.
-    - *Code*: `backend/app/routers/documents.py::list_documents()`.
-
-20. **Q: How easy is it to migrate from SQLite to PostgreSQL?**
-    - **A**: Extremely easy. Changing `DATABASE_URL` in `app/core/config.py` to `postgresql+psycopg://...` requires minimal code change since persistence is handled entirely via SQLAlchemy ORM models.
-
----
-
-## SECTION 14 — SECURITY REVIEW
+## SECTION 11 — SECURITY REVIEW
 
 | Security Metric | Status Level | Findings & Analysis |
 | :--- | :--- | :--- |
@@ -605,7 +491,7 @@ App.jsx (Main Container & Active Tab State)
 
 ---
 
-## SECTION 15 — CURRENT LIMITATIONS
+## SECTION 12 — CURRENT LIMITATIONS
 
 ### Genuinely NOT Implemented Yet
 
@@ -619,7 +505,7 @@ App.jsx (Main Container & Active Tab State)
 
 ---
 
-## SECTION 16 — MILESTONE STATUS
+## SECTION 13 — MILESTONE STATUS
 
 | Feature | Status | Implementation Evidence Location |
 | :--- | :--- | :--- |
@@ -640,7 +526,7 @@ App.jsx (Main Container & Active Tab State)
 
 ---
 
-## SECTION 17 — HOW TO RUN THE CURRENT SYSTEM
+## SECTION 13 — HOW TO RUN THE CURRENT SYSTEM
 
 ### 1. Start the Backend Server
 ```bash
@@ -668,7 +554,7 @@ npm run dev
 
 ---
 
-## SECTION 18 — SUMMARY OF IMPLEMENTATION
+## SECTION 14 — SUMMARY OF IMPLEMENTATION
 
 - **Implemented**: SQLite DB, SQLAlchemy 2.x ORM (`Document` & `DocumentVersion`), File Storage under `uploads/`, Header signature checks, Text extraction (PDF via `pypdf`, DOCX via `python-docx`, TXT), Versioning status updates (`current`/`superseded`), REST APIs (Upload, List, Detail, Version Text, Delete), Pytest suite (11 tests), and React upload vault UI.
 - **Partially Implemented**: In-memory demo endpoints (`/api/cases`, `/api/trace`, mock TF-IDF `/api/rag/ask`) using temporary data arrays in `storage.py`.
