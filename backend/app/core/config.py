@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     APP_NAME: str = "LexTrace Legal Intelligence"
     DEBUG: bool = True
     
-    # Database connection string - easily updated to postgresql+psycopg://... later
+    # Database connection string
     DATABASE_URL: str = "sqlite:///./data/lextrace.db"
     
     # File Storage
@@ -22,9 +22,13 @@ class Settings(BaseSettings):
     ALLOWED_EXTENSIONS: set = {".pdf", ".docx", ".txt"}
     
     # Document Chunking Configuration
-    CHUNK_SIZE_CHARS: int = 1000  # Target maximum chunk size in characters (~200 words)
-    CHUNK_OVERLAP_CHARS: int = 150  # Character overlap between adjacent chunks (~30 words)
-    DEFAULT_PAGE_SIZE: int = 50  # Default pagination limit for chunk APIs
+    CHUNK_SIZE_CHARS: int = 1000
+    CHUNK_OVERLAP_CHARS: int = 150
+    DEFAULT_PAGE_SIZE: int = 50
+    
+    # Groq LLM Configuration (Milestone 5)
+    GROQ_API_KEY: str = ""
+    GROQ_MODEL: str = "llama-3.3-70b-versatile"
     
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

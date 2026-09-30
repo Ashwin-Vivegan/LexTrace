@@ -3,13 +3,14 @@ import {
   FileText, UploadCloud, Eye, Trash2, CheckCircle2, 
   AlertCircle, X, Layers, Calendar, ShieldCheck, Tag
 } from 'lucide-react';
-import { fetchDocumentDetail, fetchExtractedText, deleteDocument } from '../api';
+import { fetchDocumentDetail, fetchExtractedText, deleteDocument, fetchVersionChunks } from '../api';
 
 export default function DocumentManager({ documents, onUploadDoc }) {
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedDocDetail, setSelectedDocDetail] = useState(null);
   const [activeTextPreview, setActiveTextPreview] = useState(null);
+  const [activeChunkPreview, setActiveChunkPreview] = useState(null); // { version_id, total_chunks, chunks[] }
   
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [uploadMessage, setUploadMessage] = useState(null);
@@ -106,6 +107,15 @@ export default function DocumentManager({ documents, onUploadDoc }) {
     const textData = await fetchExtractedText(docId, versionId);
     if (textData) {
       setActiveTextPreview(textData);
+      setActiveChunkPreview(null); // clear chunks when switching to text
+    }
+  };
+
+  const handleFetchChunks = async (docId, versionId) => {
+    const data = await fetchVersionChunks(docId, versionId, 1, 100);
+    if (data && data.chunks) {
+      setActiveChunkPreview(data);
+      setActiveTextPreview(null); // clear text when switching to chunks
     }
   };
 
@@ -440,25 +450,39 @@ export default function DocumentManager({ documents, onUploadDoc }) {
             <h4 style={{ fontSize: '0.95rem', fontWeight: 600, marginBottom: '10px' }}>Document Versions ({selectedDocDetail.versions.length})</h4>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '20px' }}>
               {selectedDocDetail.versions.map((ver) => (
-                <div key={ver.version_id} style={{ padding: '14px', borderRadius: '8px', background: 'rgba(255, 255, 255, 0.03)', border: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>v{ver.version_number}</span>
-                      <span className={`badge ${ver.status === 'current' ? 'badge-low' : 'badge-high'}`}>
-                        {ver.status}
-                      </span>
+                <div key={ver.version_id} style={{ padding: '14px', borderRadius: '8px', background: 'rgba(255, 255, 255, 0.03)', border: '1px solid var(--border-subtle)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>v{ver.version_number}</span>
+                        <span className={`badge ${ver.status === 'current' ? 'badge-low' : 'badge-high'}`}>
+                          {ver.status}
+                        </span>
+                        <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', background: 'rgba(139,92,246,0.12)', color: 'var(--accent-purple)', borderRadius: '4px', padding: '1px 6px', fontFamily: 'monospace' }}>
+                          {ver.chunk_count} chunks
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+                        File: {ver.file_name} ({ver.file_type.toUpperCase()}, {(ver.file_size / 1024).toFixed(1)} KB) • Text Length: {ver.text_length} chars
+                      </div>
                     </div>
-                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px' }}>
-                      File: {ver.file_name} ({ver.file_type.toUpperCase()}, {(ver.file_size / 1024).toFixed(1)} KB) • Text Length: {ver.text_length} chars
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button 
+                        className="btn-secondary" 
+                        onClick={() => handleFetchText(selectedDocDetail.document_id, ver.version_id)}
+                        style={{ fontSize: '0.75rem', padding: '6px 12px' }}
+                      >
+                        Extracted Text
+                      </button>
+                      <button 
+                        className="btn-secondary" 
+                        onClick={() => handleFetchChunks(selectedDocDetail.document_id, ver.version_id)}
+                        style={{ fontSize: '0.75rem', padding: '6px 12px', color: 'var(--accent-purple)', borderColor: 'rgba(139,92,246,0.35)' }}
+                      >
+                        <Layers size={12} style={{ marginRight: '4px' }} /> View Chunks
+                      </button>
                     </div>
                   </div>
-                  <button 
-                    className="btn-secondary" 
-                    onClick={() => handleFetchText(selectedDocDetail.document_id, ver.version_id)}
-                    style={{ fontSize: '0.75rem', padding: '6px 12px' }}
-                  >
-                    View Extracted Text
-                  </button>
                 </div>
               ))}
             </div>
@@ -466,14 +490,14 @@ export default function DocumentManager({ documents, onUploadDoc }) {
             {activeTextPreview && (
               <div style={{ marginTop: '16px', borderTop: '1px solid var(--border-subtle)', paddingTop: '16px' }}>
                 <h5 style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--accent-cyan)', marginBottom: '8px' }}>
-                  Extracted Text Preview for {activeTextPreview.version_id}:
+                  Extracted Text Preview — {activeTextPreview.version_id}:
                 </h5>
                 <pre style={{
                   background: '#0d1117',
                   padding: '14px',
                   borderRadius: '8px',
                   fontSize: '0.8rem',
-                  maxHeight: '200px',
+                  maxHeight: '220px',
                   overflowY: 'auto',
                   whiteSpace: 'pre-wrap',
                   wordBreak: 'break-word',
@@ -481,6 +505,88 @@ export default function DocumentManager({ documents, onUploadDoc }) {
                 }}>
                   {activeTextPreview.text}
                 </pre>
+              </div>
+            )}
+
+            {activeChunkPreview && (
+              <div style={{ marginTop: '16px', borderTop: '1px solid var(--border-subtle)', paddingTop: '16px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                  <h5 style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--accent-purple)' }}>
+                    <Layers size={14} style={{ marginRight: '6px', verticalAlign: 'middle' }} />
+                    Document Chunks — {activeChunkPreview.version_id}
+                  </h5>
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                    Showing {activeChunkPreview.chunks.length} of {activeChunkPreview.total_chunks} chunks
+                  </span>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '380px', overflowY: 'auto' }}>
+                  {activeChunkPreview.chunks.map((chunk) => (
+                    <div
+                      key={chunk.chunk_id}
+                      style={{
+                        background: '#0d1117',
+                        borderRadius: '8px',
+                        padding: '12px 14px',
+                        border: '1px solid rgba(139,92,246,0.15)'
+                      }}
+                    >
+                      {/* Chunk header row */}
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '8px', alignItems: 'center' }}>
+                        <span style={{
+                          fontFamily: 'monospace', fontSize: '0.7rem',
+                          background: 'rgba(139,92,246,0.15)', color: 'var(--accent-purple)',
+                          borderRadius: '4px', padding: '1px 7px'
+                        }}>
+                          #{chunk.chunk_index + 1}
+                        </span>
+                        {chunk.section_name && (
+                          <span style={{
+                            fontSize: '0.7rem', color: '#60a5fa',
+                            background: 'rgba(59,130,246,0.1)',
+                            borderRadius: '4px', padding: '1px 7px',
+                            maxWidth: '240px', overflow: 'hidden',
+                            textOverflow: 'ellipsis', whiteSpace: 'nowrap'
+                          }} title={chunk.section_name}>
+                            § {chunk.section_name}
+                          </span>
+                        )}
+                        {chunk.subsection_name && (
+                          <span style={{
+                            fontSize: '0.7rem', color: '#a78bfa',
+                            background: 'rgba(167,139,250,0.1)',
+                            borderRadius: '4px', padding: '1px 7px',
+                            maxWidth: '200px', overflow: 'hidden',
+                            textOverflow: 'ellipsis', whiteSpace: 'nowrap'
+                          }} title={chunk.subsection_name}>
+                            ↳ {chunk.subsection_name}
+                          </span>
+                        )}
+                        {chunk.page_number != null && (
+                          <span style={{
+                            fontSize: '0.7rem', color: 'var(--text-muted)',
+                            marginLeft: 'auto'
+                          }}>
+                            p.{chunk.page_number}
+                          </span>
+                        )}
+                      </div>
+                      {/* Chunk content */}
+                      <p style={{
+                        fontSize: '0.78rem', color: '#c9d1d9',
+                        lineHeight: '1.55', margin: 0,
+                        whiteSpace: 'pre-wrap', wordBreak: 'break-word'
+                      }}>
+                        {chunk.content}
+                      </p>
+                      {/* Character offsets */}
+                      {(chunk.character_start != null && chunk.character_end != null) && (
+                        <div style={{ marginTop: '6px', fontSize: '0.65rem', color: 'rgba(148,163,184,0.5)', fontFamily: 'monospace' }}>
+                          chars {chunk.character_start}–{chunk.character_end}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>

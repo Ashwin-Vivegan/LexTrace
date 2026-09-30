@@ -159,6 +159,19 @@ async def upload_document(
     try:
         db.commit()
         db.refresh(new_version)
+        
+        # Auto-index chunks into FTS5 and FAISS
+        try:
+            from app.services.keyword_search import KeywordSearchService
+            from app.routers.semantic_search import get_semantic_search_service
+            
+            kw_service = KeywordSearchService()
+            kw_service.index_chunks(db, chunks)
+            
+            sem_service = get_semantic_search_service()
+            sem_service.index_document_version(db, version_id)
+        except Exception as idx_err:
+            print(f"Warning: Automatic search index synchronization failed: {idx_err}")
     except Exception as db_err:
         db.rollback()
         if os.path.exists(abs_path):
@@ -343,6 +356,19 @@ def delete_document(document_id: str, db: Session = Depends(get_db)):
     # 2. Delete database records (cascades to DocumentVersion and DocumentChunk)
     db.delete(doc)
     db.commit()
+
+    # 3. Synchronize search indices (rebuild FTS5 and FAISS indices)
+    try:
+        from app.services.keyword_search import KeywordSearchService
+        from app.routers.semantic_search import get_semantic_search_service
+        
+        kw_service = KeywordSearchService()
+        kw_service.rebuild_index(db)
+        
+        sem_service = get_semantic_search_service()
+        sem_service.rebuild_index(db)
+    except Exception as sync_err:
+        print(f"Warning: Index synchronization on deletion failed: {sync_err}")
 
     return {
         "success": True,

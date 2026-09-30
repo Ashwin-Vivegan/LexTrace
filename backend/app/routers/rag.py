@@ -1,61 +1,41 @@
-from fastapi import APIRouter, status
-from app.services.rag_engine import rag_service
-from app.schemas import (
-    RagQueryRequest, RagQueryResponse, RagStatsResponse, SemanticSearchResponse, VectorSearchResult
-)
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+from app.db.database import get_db
+from app.schemas.rag import RAGQueryRequest, RAGQueryResponse
+from app.routers.semantic_search import get_hybrid_search_service
+from app.services.hybrid_search import HybridSearchService
+from app.services.rag_service import RAGService
+from app.services.llm_provider import GroqLLMProvider
 
-router = APIRouter(prefix="/rag", tags=["RAG AI Engine"])
+router = APIRouter(prefix="/rag", tags=["RAG Research Assistant"])
 
-@router.post("/ask", response_model=RagQueryResponse)
-def ask_rag_ai(payload: RagQueryRequest):
-    """Executes RAG AI workflow: Vector Search + Augmented Context Generation + Citation Extraction."""
-    return rag_service.ask(
-        query=payload.query,
-        case_id_filter=payload.caseId,
-        top_k=payload.topK or 3,
-        min_similarity=payload.minSimilarity or 0.05
-    )
+_groq_provider = GroqLLMProvider()
 
-@router.post("/semantic-search", response_model=SemanticSearchResponse)
-def semantic_search(payload: RagQueryRequest):
-    """Performs raw vector similarity search against document chunks."""
-    matches = rag_service.search_vectors(
-        query=payload.query,
-        case_id_filter=payload.caseId,
-        top_k=payload.topK or 5,
-        min_similarity=payload.minSimilarity or 0.01
-    )
-    
-    results = [
-        VectorSearchResult(
-            chunkId=chunk.chunk_id,
-            documentId=chunk.document_id,
-            documentName=chunk.document_name,
-            caseId=chunk.case_id,
-            snippet=chunk.text,
-            similarityScore=round(score * 100, 2)
+def get_rag_service(
+    hybrid_service: HybridSearchService = Depends(get_hybrid_search_service)
+) -> RAGService:
+    return RAGService(hybrid_search_service=hybrid_service, llm_provider=_groq_provider)
+
+
+@router.post("/ask", response_model=RAGQueryResponse)
+def ask_rag_ai(
+    payload: RAGQueryRequest,
+    db: Session = Depends(get_db),
+    rag_service: RAGService = Depends(get_rag_service)
+):
+    """
+    Executes RAG AI workflow: M4 Hybrid Search + Context Construction + Groq LLM Generation + Database Source Citations.
+    """
+    if not payload.query or not payload.query.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Query string cannot be empty or whitespace-only."
         )
-        for chunk, score in matches
-    ]
-    
-    return {
-        "success": True,
-        "query": payload.query,
-        "count": len(results),
-        "results": results
-    }
 
-@router.post("/ingest")
-def reindex_documents():
-    """Forces re-chunking and vector indexing across all documents."""
-    rag_service.reindex_all_documents()
-    return {
-        "success": True,
-        "message": "RAG vector space re-indexed successfully.",
-        "stats": rag_service.get_stats()
-    }
-
-@router.get("/stats", response_model=RagStatsResponse)
-def get_rag_stats():
-    """Returns vector store metrics and index status."""
-    return rag_service.get_stats()
+    try:
+        result = rag_service.ask(db, query=payload.query, top_k=payload.top_k)
+        return RAGQueryResponse(**result)
+    except ValueError as val_err:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(val_err))
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))

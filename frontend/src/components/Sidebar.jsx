@@ -4,7 +4,8 @@ import { LayoutDashboard, Scale, GitCommit, FileText, ShieldAlert, Sparkles, Bot
 export default function Sidebar({ activeTab, setActiveTab }) {
   const navItems = [
     { id: 'dashboard', label: 'Overview Dashboard', icon: LayoutDashboard },
-    { id: 'rag', label: 'RAG AI Assistant', icon: Bot, badge: 'Python FastAPI' },
+    { id: 'search', label: 'Semantic Search', icon: Bot, badge: 'FAISS' },
+    { id: 'rag', label: 'RAG AI Assistant (Legacy)', icon: Bot },
     { id: 'cases', label: 'Case Trace Registry', icon: Scale },
     { id: 'trace', label: 'Audit Log & Lineage', icon: GitCommit },
     { id: 'documents', label: 'Document Vault', icon: FileText },
