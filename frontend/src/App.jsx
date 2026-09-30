@@ -6,6 +6,7 @@ import CaseTracker from './components/CaseTracker';
 import TraceAuditLog from './components/TraceAuditLog';
 import DocumentManager from './components/DocumentManager';
 import RagAssistant from './components/RagAssistant';
+import SemanticSearch from './components/SemanticSearch';
 import { 
   fetchHealth, 
   fetchCases, 
@@ -17,7 +18,7 @@ import {
 } from './api';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('rag');
+  const [activeTab, setActiveTab] = useState('search');
   const [searchTerm, setSearchTerm] = useState('');
   const [apiStatus, setApiStatus] = useState('offline');
 
@@ -90,6 +91,10 @@ export default function App() {
         <Header searchTerm={searchTerm} setSearchTerm={setSearchTerm} apiStatus={apiStatus} />
 
         <main style={{ flex: 1, padding: '32px', maxWidth: '1400px', width: '100%', margin: '0 auto' }}>
+          {activeTab === 'search' && (
+            <SemanticSearch />
+          )}
+
           {activeTab === 'rag' && (
             <RagAssistant />
           )}

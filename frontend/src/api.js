@@ -1,4 +1,4 @@
-const API_BASE = 'http://localhost:5000/api';
+const API_BASE = 'http://localhost:8000/api';
 
 export async function fetchHealth() {
   try {
@@ -146,17 +146,32 @@ export async function deleteDocument(documentId) {
 
 
 // RAG AI Engine Endpoints
-export async function askRag(query, caseId = '', topK = 3) {
+export async function askRag(query, topK = 5) {
   try {
     const res = await fetch(`${API_BASE}/rag/ask`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query, caseId: caseId || null, topK })
+      body: JSON.stringify({ query, top_k: topK })
     });
-    return await res.json();
+    const data = await res.json();
+    if (res.ok) {
+      return { success: true, ...data };
+    } else {
+      return {
+        success: false,
+        answer: data.detail || 'Failed to generate answer from LexTrace RAG Engine.',
+        citations: [],
+        retrieved_chunks: []
+      };
+    }
   } catch (err) {
     console.error('RAG query error:', err);
-    return { success: false, answer: 'Error connecting to Python FastAPI RAG AI engine.' };
+    return {
+      success: false,
+      answer: 'Error connecting to LexTrace RAG AI engine.',
+      citations: [],
+      retrieved_chunks: []
+    };
   }
 }
 
@@ -191,5 +206,81 @@ export async function reindexRag() {
   } catch (err) {
     console.error('Reindex RAG error:', err);
     return { success: false };
+  }
+}
+
+// --- Milestone 3: Real Semantic Search Endpoints ---
+
+export async function realSemanticSearch(query, topK = 5) {
+  try {
+    const res = await fetch(`${API_BASE}/search/semantic`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query, top_k: topK })
+    });
+    return await res.json();
+  } catch (err) {
+    console.error('Semantic search error:', err);
+    return null;
+  }
+}
+
+export async function realHybridSearch(query, mode = 'hybrid', topK = 5) {
+  try {
+    const res = await fetch(`${API_BASE}/search`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query, mode, top_k: topK })
+    });
+    return await res.json();
+  } catch (err) {
+    console.error('Unified hybrid search error:', err);
+    return null;
+  }
+}
+
+export async function fetchSearchIndexStatus() {
+  try {
+    const res = await fetch(`${API_BASE}/search/index/status`);
+    return await res.json();
+  } catch (err) {
+    console.error('Fetch index status error:', err);
+    return null;
+  }
+}
+
+export async function indexDocumentVersion(documentId, versionId) {
+  try {
+    const res = await fetch(`${API_BASE}/search/documents/${encodeURIComponent(documentId)}/versions/${encodeURIComponent(versionId)}/index`, {
+      method: 'POST'
+    });
+    return await res.json();
+  } catch (err) {
+    console.error('Index document version error:', err);
+    return null;
+  }
+}
+
+export async function rebuildSearchIndex() {
+  try {
+    const res = await fetch(`${API_BASE}/search/rebuild-index`, {
+      method: 'POST'
+    });
+    return await res.json();
+  } catch (err) {
+    console.error('Rebuild index error:', err);
+    return null;
+  }
+}
+
+export async function rebuildKeywordIndex() {
+  try {
+    const res = await fetch(`${API_BASE}/search/rebuild-keyword-index`, {
+      method: 'POST'
+    });
+    return await res.json();
+  } catch (err) {
+    console.error('Rebuild keyword index error:', err);
+    return null;
   }
 }
